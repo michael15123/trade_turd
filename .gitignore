@@ -1,0 +1,5 @@
+app.log
+config.toml
+*.sqlite
+test.py
+main.py
