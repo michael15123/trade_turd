@@ -3,3 +3,4 @@ config.toml
 *.sqlite
 test.py
 main.py
+__pycache__
