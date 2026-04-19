@@ -5,7 +5,7 @@ import jwt
 from cryptography.hazmat.primitives import serialization
 import secrets
 from dataclasses import dataclass, field
-from order import LimitOrder
+from .order import LimitOrder
 
 @dataclass(slots=True)
 class Coinbase:

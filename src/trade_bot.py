@@ -2,8 +2,8 @@ import tomllib
 from typing import Literal
 from database_interface import SQLite, Where
 from dataclasses import dataclass, field
-from order import LimitOrder
-from coinbase import Coinbase
+from .order import LimitOrder
+from .coinbase import Coinbase
 from datetime import timedelta
 
 import logging
@@ -200,25 +200,29 @@ class TradeBot:
             self.repost_filled(self.order_size)
 
     def readjust_positions(self):
-        lowest_sell                          = min([order.limit_price for id, order in self.orders.items() if order.side == "SELL"])
-        highest_buy                          = max([order.limit_price for id, order in self.orders.items() if order.side == "BUY"])
+        cur_sells                            = [order.limit_price for id, order in self.orders.items() if order.side == "SELL"]
+        cur_buys                             = [order.limit_price for id, order in self.orders.items() if order.side == "BUY"]
         resp                                 = self.coinbase.get_product(self.trade_pair)
         if resp.ok:
             current_price                    = float(resp.json()["price"])
 
-            if lowest_sell > current_price * self.reset_delta:
-                self.log.info(f"Resetting sell positions: {lowest_sell} > {current_price * self.reset_delta}")
-                num_of_cancels               = self.cancel_orders("SELLS")
-                _, new_sells                 = self.initialize_positions(current_price, 0, num_of_cancels)
-                for sell in new_sells:
-                    self.create_order(sell[0], self.order_size, sell[1])
+            if cur_sells:
+                lowest_sell                  = min(cur_sells)
+                if lowest_sell > current_price * (1 + self.reset_delta):
+                    self.log.info(f"Resetting sell positions: {lowest_sell} > {current_price * (1 + self.reset_delta)}")
+                    num_of_cancels           = self.cancel_orders("SELLS")
+                    _, new_sells             = self.initialize_positions(current_price, 0, num_of_cancels)
+                    for sell in new_sells:
+                        self.create_order(sell[0], self.order_size, sell[1])
             
-            if highest_buy < current_price * self.reset_delta:
-                self.log.info(f"Resetting buy positions: {highest_buy} < {current_price * self.reset_delta}")
-                num_of_cancels               = self.cancel_orders("BUYS")
-                new_buys, _                  = self.initialize_positions(current_price, num_of_cancels, 0)
-                for buy in new_buys:
-                    self.create_order(buy[0], self.order_size, buy[1])
+            if cur_buys:
+                highest_buy                  = max(cur_buys)
+                if highest_buy < current_price * (1 - self.reset_delta):
+                    self.log.info(f"Resetting buy positions: {highest_buy} < {current_price * (1 - self.reset_delta)}")
+                    num_of_cancels           = self.cancel_orders("BUYS")
+                    new_buys, _              = self.initialize_positions(current_price, num_of_cancels, 0)
+                    for buy in new_buys:
+                        self.create_order(buy[0], self.order_size, buy[1])
             
         else:
             self.log.info(f"Failed to get Product info: {resp.text}")
