@@ -147,32 +147,24 @@ class TradeBot:
         reposted_orders:list[LimitOrder]     = []
         for id, order in self.orders.items():
             if order.status == "FILLED":
-                repost_sucess                = False
                 repost_order                 = order.build_repost(self.trade_pair, self.order_size, self.precision, self.rebuy_ratio, self.resell_ratio)
                 
-                while not repost_sucess:
-                    resp                     = self.coinbase.place_order(repost_order, self.precision)
-                    if resp.ok:
-                        repost_info:dict     = resp.json()
-                        if repost_info["success"]:
-                            order.reposted_info(repost_info)
-                            repost_order.posted_order(repost_info)
-                            filled_orders.append(order)
-                            reposted_orders.append(repost_order)
-                            repost_sucess    = True
-                            self.log.info(f"Reposted {order.side} at {order.limit_price} to {order.repost_side} at {order.repost_price}")
-                        else:
-                            self.log.info(f"Successful authentication for Order repost, but failed: {resp.text}")
-                            if repost_order.side == "SELL":
-                                adjust       = repost_order.limit_price + self.spacing
-                            elif repost_order.side == "BUY":
-                                adjust       = repost_order.limit_price - self.spacing
+                resp                     = self.coinbase.place_order(repost_order, self.precision)
+                if resp.ok:
+                    repost_info:dict     = resp.json()
+                    if repost_info["success"]:
+                        order.reposted_info(repost_info)
+                        repost_order.posted_order(repost_info)
+                        filled_orders.append(order)
+                        reposted_orders.append(repost_order)
+                        self.log.info(f"Reposted {order.side} at {order.limit_price} to {order.repost_side} at {order.repost_price}")
 
-                            self.log.info(f"Trying again with a {repost_order.side} price from {repost_order.limit_price} to {adjust}")
-                            repost_order.limit_price = adjust
                     else:
-                        self.log.info(f"Order repost failed: {resp.text}")
-                
+                        self.log.info(f"Successful authentication for Order repost, but failed: {resp.text}")
+                else:
+                    self.log.info(f"Order repost failed: {resp.text}")
+        
+
         with self.db.cursor() as cur:
             self.db.insert(cur, self.current_orders, [order.to_tuple() for order in reposted_orders])
             self.db.delete(cur, self.current_orders, Where("order_id").in_([order.order_id for order in filled_orders]))
@@ -182,6 +174,47 @@ class TradeBot:
             self.orders.pop(order.order_id)
         for order in reposted_orders:
             self.orders[order.order_id] = order
+
+    # def repost_filled(self):
+    #     filled_orders:list[LimitOrder]       = []
+    #     reposted_orders:list[LimitOrder]     = []
+    #     for id, order in self.orders.items():
+    #         if order.status == "FILLED":
+    #             repost_sucess                = False
+    #             repost_order                 = order.build_repost(self.trade_pair, self.order_size, self.precision, self.rebuy_ratio, self.resell_ratio)
+                
+    #             while not repost_sucess:
+    #                 resp                     = self.coinbase.place_order(repost_order, self.precision)
+    #                 if resp.ok:
+    #                     repost_info:dict     = resp.json()
+    #                     if repost_info["success"]:
+    #                         order.reposted_info(repost_info)
+    #                         repost_order.posted_order(repost_info)
+    #                         filled_orders.append(order)
+    #                         reposted_orders.append(repost_order)
+    #                         repost_sucess    = True
+    #                         self.log.info(f"Reposted {order.side} at {order.limit_price} to {order.repost_side} at {order.repost_price}")
+    #                     else:
+    #                         self.log.info(f"Successful authentication for Order repost, but failed: {resp.text}")
+    #                         if repost_order.side == "SELL":
+    #                             adjust       = repost_order.limit_price + self.spacing
+    #                         elif repost_order.side == "BUY":
+    #                             adjust       = repost_order.limit_price - self.spacing
+
+    #                         self.log.info(f"Trying again with a {repost_order.side} price from {repost_order.limit_price} to {adjust}")
+    #                         repost_order.limit_price = adjust
+    #                 else:
+    #                     self.log.info(f"Order repost failed: {resp.text}")
+                
+    #     with self.db.cursor() as cur:
+    #         self.db.insert(cur, self.current_orders, [order.to_tuple() for order in reposted_orders])
+    #         self.db.delete(cur, self.current_orders, Where("order_id").in_([order.order_id for order in filled_orders]))
+    #         self.db.insert(cur, self.executed_orders, [order.to_tuple() for order in filled_orders])
+            
+    #     for order in filled_orders:
+    #         self.orders.pop(order.order_id)
+    #     for order in reposted_orders:
+    #         self.orders[order.order_id] = order
                     
 
     def startup(self, buys:int, sells:int):
